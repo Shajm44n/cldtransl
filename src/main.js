@@ -28,12 +28,13 @@ Lila: (describe what Lila is – a product, project or person – and how it sho
 Topics: automotive software, software-defined vehicles, AI.
 People: (add names and titles, e.g. Tanaka-san, 部長 at …)`;
 
-const DEFAULT_CONTEXT = `My company: Acsia (automotive software). Always keep "Acsia" and "LiLA" in Latin letters.
-Product: LiLA, Acsia's agentic AI platform (SpecFlow, SafeFlow, CodeFlow, TestFlow).
+const DEFAULT_CONTEXT = `My company: Acsia (automotive software), pronounced "Axia" (アクシア). Always write "Acsia" and "LiLA" in Latin letters.
+Product: LiLA, pronounced "Lila" (リラ), Acsia's agentic AI platform (SpecFlow, SafeFlow, CodeFlow, TestFlow).
 People: (add names and titles, e.g. Tanaka-san, 部長 at …)
 
 Speech-recognition fixes, one per line as "heard => correct":
 Axia => Acsia
+アクシア => Acsia
 Acsia Tech => Acsia
 Lila => LiLA
 Leela => LiLA

@@ -59,6 +59,7 @@ The four flows across the ASPICE V-model:
 - CodeFlow (SWE.3, SWE.4), in VS Code for automotive C/C++: unit tests with mocks (Unity/GoogleTest, MC/DC coverage), MISRA C:2023 checking (about 200 rules) with verified fixes, and Doxygen documentation with logic proven unchanged. Days become hours.
 - TestFlow (SWE.6, SYS.5), integration & testing on real hardware such as instrument clusters: test cases from requirements, Python scripts checked against the CAN/ADB signal list, engineer approval gate, bench run, camera evidence, AI verdict (pass/fail/inconclusive), Excel report. US Tier 1 case: 55% less effort.
 Overall 50–60% productivity gain. Acsia also offers Forward Deployed Engineering (FDE) as a service, starting with a 2-month consulting engagement on one high-priority use case.
+Pronunciation: LiLA is said "Lila" (リラ, rira) and Acsia is said "Axia" (アクシア, akushia). Write them as "LiLA" and "Acsia" in both languages; in romaji write "Lila" and "Akushia". Speech recognition may write them as "Lila", "Leela", "Axia", "Asia", リラ or アクシア.
 Useful Japanese: 要件定義 / 要件分析 (requirements), 仕様書 (specification), 機能安全 (functional safety), 脅威分析とリスクアセスメント (TARA), 侵入テスト / ペネトレーションテスト (pentest), 単体テスト (unit test), 静的解析 (static analysis), トレーサビリティ (traceability), 実機検証 (testing on real hardware), オンプレミス (on-premise), 工数削減 (effort reduction), 量産開始 (start of production), PoC / 実証実験.
 </acsia_lila>
 `;

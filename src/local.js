@@ -69,7 +69,7 @@ export const PHRASEBOOK = [
   {
     title: 'Introducing LiLA',
     phrases: [
-      ['LiLAは、自動車ソフトウェア開発のためのエージェント型AIプラットフォームです。', 'LiLA wa, jidōsha sofutowea kaihatsu no tame no ējento-gata AI purattofōmu desu.', 'LiLA is an agentic AI platform for automotive software development.'],
+      ['LiLAは、自動車ソフトウェア開発のためのエージェント型AIプラットフォームです。', 'Lila wa, jidōsha sofutowea kaihatsu no tame no ējento-gata AI purattofōmu desu.', 'LiLA is an agentic AI platform for automotive software development.'],
       ['要件定義、サイバーセキュリティ、コード検証、テストの4つのフローがあります。', 'Yōken teigi, saibā sekyuriti, kōdo kenshō, tesuto no yottsu no furō ga arimasu.', 'It has four flows: requirements, cybersecurity, code verification and testing.'],
       ['SpecFlowは、OEMの仕様書から要件を抽出し、分類します。日本語の仕様書にもそのまま対応しています。', 'SpecFlow wa, OEM no shiyōsho kara yōken o chūshutsu shi, bunrui shimasu. Nihongo no shiyōsho ni mo sonomama taiō shite imasu.', 'SpecFlow extracts and classifies requirements from OEM specifications, including Japanese ones, without a translation step.'],
       ['SafeFlowは、ISO/SAE 21434とUN R155に沿ったTARAとペネトレーションテスト計画を、約1週間で作成します。', 'SafeFlow wa, ISO/SAE 21434 to UN R155 ni sotta TARA to penetorēshon tesuto keikaku o, yaku isshūkan de sakusei shimasu.', 'SafeFlow produces the TARA and pentest plan to ISO/SAE 21434 and UN R155 in about one week.'],

@@ -173,11 +173,21 @@ export function stopSpeaking() {
   if (synthesisSupported) speechSynthesis.cancel();
 }
 
+// How names are said aloud: LiLA is "Lila" (リラ), Acsia is "Axia" (アクシア).
+const PRONUNCIATION = {
+  ja: [[/LiLA|Lila|LILA/g, 'リラ'], [/Acsia/gi, 'アクシア']],
+  en: [[/LiLA|LILA/g, 'Lila'], [/Acsia/gi, 'Axia']],
+};
+
+export function spokenForm(text, lang) {
+  return (PRONUNCIATION[lang] || []).reduce((t, [re, say]) => t.replace(re, say), text);
+}
+
 export function speak(text, lang, { rate = 1, voiceURI, locale } = {}) {
   if (!synthesisSupported || !text) return Promise.resolve();
   return new Promise((resolve) => {
     speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(text);
+    const u = new SpeechSynthesisUtterance(spokenForm(text, lang));
     const voice = pickVoice(lang, voiceURI, locale);
     if (voice) u.voice = voice;
     u.lang = voice?.lang || locale || (lang === 'ja' ? 'ja-JP' : 'en-US');
