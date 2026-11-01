@@ -161,3 +161,23 @@ dialog::backdrop { background: #0009; }
 }
 .big-view #bigText { font-size: clamp(28px, 8vw, 56px); font-weight: 700; margin: 0; line-height: 1.35; }
 .big-view #bigSub { color: #555; margin: 0; }
+
+.engine-chip {
+  border: 1px solid var(--line); background: var(--panel-2); border-radius: 999px;
+  padding: 3px 10px; font-size: 13px; color: var(--ok);
+}
+.engine-chip.offline { color: var(--warn); }
+.phrases h3 { margin: 14px 0 2px; font-size: 15px; color: var(--muted); }
+.phrases .hint { color: var(--muted); font-size: 13px; margin: 0; }
+.phrases .phrase { width: 100%; }
+.settings .status { font-size: 14px; color: var(--text); }
+.settings progress { width: 100%; }
+@media (max-width: 420px) {
+  .brand-name { display: none; }
+  .modes button { padding: 6px 10px; }
+}
+.settings fieldset { min-width: 0; }
+.settings select, .settings input, .settings textarea { width: 100%; max-width: 100%; }
+.settings label.check input { width: auto; }
+.settings .row button { flex: 1; }
+.settings small a { color: var(--accent-2); }

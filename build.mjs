@@ -8,15 +8,20 @@ const serve = process.argv.includes('--serve');
 rmSync('dist', { recursive: true, force: true });
 mkdirSync('dist', { recursive: true });
 cpSync('public', 'dist', { recursive: true });
+// ONNX Runtime for the offline models, served locally so it works without internet.
+mkdirSync('dist/ort', { recursive: true });
+for (const f of ['ort-wasm-simd-threaded.jsep.mjs', 'ort-wasm-simd-threaded.jsep.wasm']) {
+  cpSync(`node_modules/@huggingface/transformers/dist/${f}`, `dist/ort/${f}`);
+}
 
 const options = {
-  entryPoints: ['src/main.js'],
+  entryPoints: { app: 'src/main.js', 'offline-worker': 'src/offline-worker.js' },
   bundle: true,
   format: 'esm',
   target: ['es2020', 'safari14'],
   minify: !serve,
   sourcemap: serve,
-  outfile: 'dist/app.js',
+  outdir: 'dist',
 };
 
 if (serve) {
