@@ -17,10 +17,11 @@
 </head>
 <body>
   <header class="topbar">
-    <div class="brand"><span class="logo">架</span><span>Kakehashi</span></div>
+    <div class="brand"><span class="logo">架</span><span class="brand-name">Kakehashi</span></div>
     <nav class="modes" role="tablist" aria-label="Mode">
       <button role="tab" data-mode="translator" aria-selected="true">Translator</button>
       <button role="tab" data-mode="interpreter" aria-selected="false">Interpreter</button>
+      <button role="tab" data-mode="phrases" aria-selected="false">Phrases</button>
     </nav>
     <button class="icon-btn" id="settingsBtn" aria-label="Settings">⚙︎</button>
   </header>
@@ -34,11 +35,13 @@
       <p class="mode-help" data-for="interpreter" hidden><b>Interpreter</b> also explains hidden meaning and Japanese business etiquette, and knows automotive, AI and your glossary. When your partner speaks, it suggests replies. You can also ask it questions below.</p>
       <ol>
         <li>Connect your Bluetooth headset to the phone.</li>
-        <li>Add your Anthropic API key in <b>Settings</b>.</li>
+        <li>In <b>Settings</b>, add your Anthropic API key for Claude, and/or download the <b>offline pack</b> to translate without internet.</li>
         <li>Tap <b>🇬🇧 I speak</b> or <b>🇯🇵 相手</b> and talk.</li>
       </ol>
     </section>
   </main>
+
+  <section id="phrases" class="transcript phrases" hidden></section>
 
   <div id="live" class="live" hidden>
     <span class="dot"></span><span id="liveText">Listening…</span>
@@ -64,6 +67,7 @@
     </div>
     <div class="toggles">
       <label><input type="checkbox" id="quickAutoTurn"> Hands-free</label>
+      <button type="button" id="engineChip" class="engine-chip">☁︎ Claude</button>
       <button type="button" id="stopBtn" class="link-btn">Stop audio</button>
     </div>
   </footer>
@@ -72,9 +76,36 @@
     <form method="dialog" class="settings">
       <h2>Settings</h2>
 
+      <label>Engine
+        <select id="sEngine">
+          <option value="auto">Auto: Claude when online, offline otherwise</option>
+          <option value="claude">Claude only (needs internet)</option>
+          <option value="offline">Offline only (on-device, no Claude)</option>
+        </select>
+        <small>Offline mode gives direct translation plus Japanese culture hints; Claude adds the full interpreter.</small>
+      </label>
+
+      <fieldset>
+        <legend>Offline pack</legend>
+        <label>Speech recognition model
+          <select id="sAsrSize">
+            <option value="base">Whisper Base: faster, smaller download</option>
+            <option value="small">Whisper Small: better Japanese, larger and slower</option>
+          </select>
+        </label>
+        <label class="check"><input type="checkbox" id="sGpu"> Use the phone's GPU (WebGPU) when available</label>
+        <div id="sOfflineStatus" class="status">Not downloaded.</div>
+        <progress id="sProgress" max="1" value="0" hidden></progress>
+        <div class="row">
+          <button type="button" id="sForget" class="danger">Delete</button>
+          <button type="button" id="sDownload" class="primary">Download offline pack</button>
+        </div>
+        <small>Download once on Wi-Fi (several hundred MB). Keep the app installed so the phone keeps the files.</small>
+      </fieldset>
+
       <label>Anthropic API key
         <input id="sApiKey" type="password" autocomplete="off" placeholder="sk-ant-…">
-        <small>Stored only on this phone. Get one at console.anthropic.com.</small>
+        <small>Stored only on this phone. Sign in to the <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">Claude Console</a> with your Claude account email, add credit, create a key and paste it here. Not needed for offline mode.</small>
       </label>
 
       <label>Model

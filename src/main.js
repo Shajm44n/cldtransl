@@ -1,5 +1,9 @@
+import Anthropic from '@anthropic-ai/sdk';
 import { LANGS } from './prompts.js';
 import { translate, interpret, ask, friendlyError } from './claude.js';
+import { Recorder } from './recorder.js';
+import { applyGlossary, cultureHints, PHRASEBOOK } from './local.js';
+import { asrReady, mtReady, offlineStatus, downloadPack, warmUp, transcribe, translateOffline, forgetPack } from './offline.js';
 import {
   Listener,
   recognitionSupported,
@@ -19,10 +23,24 @@ const $ = (id) => document.getElementById(id);
 
 // ---- Persistent state ----
 
-const DEFAULT_CONTEXT = `My company: Acsia (automotive software). Always keep "Acsia" in Latin letters. Speech recognition may hear it as "Asia" or "Axia".
+const OLD_DEFAULT_CONTEXT = `My company: Acsia (automotive software). Always keep "Acsia" in Latin letters. Speech recognition may hear it as "Asia" or "Axia".
 Lila: (describe what Lila is – a product, project or person – and how it should be written in Japanese)
 Topics: automotive software, software-defined vehicles, AI.
 People: (add names and titles, e.g. Tanaka-san, 部長 at …)`;
+
+const DEFAULT_CONTEXT = `My company: Acsia (automotive software). Always keep "Acsia" and "LiLA" in Latin letters.
+Product: LiLA, Acsia's agentic AI platform (SpecFlow, SafeFlow, CodeFlow, TestFlow).
+People: (add names and titles, e.g. Tanaka-san, 部長 at …)
+
+Speech-recognition fixes, one per line as "heard => correct":
+Axia => Acsia
+Acsia Tech => Acsia
+Lila => LiLA
+Leela => LiLA
+Spec flow => SpecFlow
+Safe flow => SafeFlow
+Code flow => CodeFlow
+Test flow => TestFlow`;
 
 const DEFAULTS = {
   apiKey: '',
@@ -41,6 +59,9 @@ const DEFAULTS = {
   context: DEFAULT_CONTEXT,
   mode: 'translator',
   typeLang: 'en',
+  engine: 'auto',
+  asrSize: 'base',
+  gpu: true,
 };
 
 function load(key, fallback) {
@@ -60,6 +81,7 @@ function save(key, value) {
 }
 
 const settings = { ...DEFAULTS, ...load('kakehashi.settings', {}) };
+if (settings.context === OLD_DEFAULT_CONTEXT) settings.context = DEFAULT_CONTEXT;
 let history = load('kakehashi.history', []).filter((h) => !h.pending);
 const saveSettings = () => save('kakehashi.settings', settings);
 const saveHistory = () => save('kakehashi.history', history.slice(-100));
@@ -71,9 +93,32 @@ const SIDES = {
 };
 
 const listener = new Listener();
+let capture = null; // the active Web Speech listener or on-device recorder
 let listeningSide = null;
 let currentAbort = null;
 let busy = false;
+
+// ---- Engine choice ----
+
+const isSamsungBrowser = /SamsungBrowser/i.test(navigator.userAgent);
+
+// Claude when online with a key (unless forced offline), otherwise on-device.
+function useClaude() {
+  if (settings.engine === 'offline') return false;
+  if (settings.engine === 'claude') return true;
+  return navigator.onLine && !!settings.apiKey;
+}
+
+function canTranslateOffline() {
+  return mtReady() || 'Translator' in self;
+}
+
+function renderEngine() {
+  const claude = useClaude();
+  const chip = $('engineChip');
+  chip.textContent = claude ? '☁︎ Claude' : '📴 Offline';
+  chip.classList.toggle('offline', !claude);
+}
 
 // ---- Rendering ----
 
@@ -91,7 +136,8 @@ function cardHtml(h) {
   const from = LANGS[h.from];
   const to = LANGS[h.to];
   const who = h.speaker === 'me' ? 'You' : 'Partner';
-  let html = `<div class="who">${from.flag} ${who} · ${from.native} → ${to.native}${h.mode === 'interpreter' ? ' · interpreter' : ''}</div>
+  const tag = h.offline ? ' · 📴 offline' : h.mode === 'interpreter' ? ' · interpreter' : '';
+  let html = `<div class="who">${from.flag} ${who} · ${from.native} → ${to.native}${tag}</div>
     <div class="source" lang="${h.from}">${esc(h.source)}</div>
     <div class="translation ${h.pending ? 'pending' : ''}" lang="${h.to}">${esc(h.translation)}</div>`;
   if (h.romaji) html += `<div class="romaji">${esc(h.romaji)}</div>`;
@@ -139,9 +185,29 @@ function renderAll() {
 }
 
 function renderMode() {
+  const phrases = settings.mode === 'phrases';
   document.querySelectorAll('.modes button').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.mode === settings.mode)));
   document.querySelectorAll('.mode-help').forEach((p) => (p.hidden = p.dataset.for !== settings.mode));
   $('askForm').hidden = settings.mode !== 'interpreter';
+  $('transcript').hidden = phrases;
+  $('phrases').hidden = !phrases;
+  $('typeForm').hidden = phrases;
+}
+
+function renderPhrases() {
+  $('phrases').innerHTML =
+    `<p class="hint">Works offline. Tap a phrase to say it in Japanese, or long-press to show it full-screen.</p>` +
+    PHRASEBOOK.map(
+      (group, g) => `<h3>${esc(group.title)}</h3>` +
+        group.phrases
+          .map(
+            ([ja, romaji, en], i) => `<button class="reply phrase" data-phrase="${g}:${i}">
+              <span class="ja" lang="ja">🔊 ${esc(ja)}</span>
+              <span class="r">${esc(romaji)}</span>
+              <span class="en">${esc(en)}</span></button>`,
+          )
+          .join(''),
+    ).join('');
 }
 
 function renderMics() {
@@ -165,10 +231,18 @@ function showBanner(html) {
 
 function checkSetup() {
   const problems = [];
-  if (!settings.apiKey) problems.push('Add your Anthropic API key in <button class="link-btn" data-open-settings>Settings</button>.');
-  if (!recognitionSupported) problems.push('Voice input is not available in this browser. Use Chrome on Android or Safari on iPhone; typing still works.');
+  const settingsLink = '<button class="link-btn" data-open-settings>Settings</button>';
+  if (isSamsungBrowser && !asrReady()) {
+    problems.push(`You are in Samsung Internet, which has no voice input. Open this page in <b>Chrome</b> (⋮ → Open in Chrome), or download the offline pack in ${settingsLink}.`);
+  } else if (!recognitionSupported && !asrReady()) {
+    problems.push(`Voice input is not available in this browser. Use Chrome, or download the offline pack in ${settingsLink}. Typing still works.`);
+  }
+  if (settings.engine !== 'offline' && !settings.apiKey && !canTranslateOffline()) {
+    problems.push(`Add your Anthropic API key, or download the offline pack, in ${settingsLink}.`);
+  }
   if (!synthesisSupported) problems.push('Read-aloud is not available in this browser.');
   showBanner(problems.join('<br>'));
+  renderEngine();
 }
 
 // ---- Core flow ----
@@ -204,7 +278,15 @@ async function processUtterance(entry) {
   const controller = new AbortController();
   currentAbort = controller;
   const prior = history.filter((h) => h !== entry);
-  try {
+  const runOffline = async () => {
+    entry.offline = true;
+    entry.translation = await translateOffline(entry.source, entry.from, entry.to);
+    entry.nuance = entry.mode === 'interpreter' ? cultureHints(entry.source, entry.from) : '';
+    entry.romaji = '';
+    entry.terms = [];
+    entry.replies = [];
+  };
+  const runClaude = async () => {
     const args = {
       settings,
       text: entry.source,
@@ -232,8 +314,25 @@ async function processUtterance(entry) {
         },
       });
     }
+  };
+  try {
+    entry.offline = false;
+    if (!useClaude()) {
+      await runOffline();
+    } else {
+      await runClaude();
+    }
   } catch (err) {
-    entry.error = friendlyError(err);
+    // Lost connection mid-conversation: fall back to the on-device engine.
+    if (err instanceof Anthropic.APIConnectionError && !(err instanceof Anthropic.APIUserAbortError) && canTranslateOffline()) {
+      try {
+        await runOffline();
+      } catch (offlineErr) {
+        entry.error = friendlyError(offlineErr);
+      }
+    } else {
+      entry.error = friendlyError(err);
+    }
   } finally {
     entry.pending = false;
     currentAbort = null;
@@ -242,7 +341,10 @@ async function processUtterance(entry) {
     renderMics();
     saveHistory();
   }
+  return finishUtterance(entry);
+}
 
+async function finishUtterance(entry) {
   if (entry.error) return false;
   if (settings.showBig && entry.speaker === 'me' && entry.to === 'ja') showBig(entry);
   if (shouldSpeak(entry)) await speak(entry.translation, entry.to, voiceOpts(entry.to));
@@ -254,7 +356,7 @@ function newEntry(side, text) {
   const entry = {
     id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     kind: 'utterance',
-    mode: settings.mode,
+    mode: settings.mode === 'interpreter' ? 'interpreter' : 'translator',
     speaker: side,
     from,
     to,
@@ -265,8 +367,31 @@ function newEntry(side, text) {
   return entry;
 }
 
+// Listens for one utterance. Uses the browser's speech recognition when online,
+// and the on-device Whisper model when offline or when the browser has none.
+async function captureSpeech(lang) {
+  const webSpeech = recognitionSupported && (useClaude() || !asrReady());
+  if (webSpeech) {
+    capture = listener;
+    return listener.listen({
+      lang,
+      sttLocale: lang === 'en' ? settings.enLocale : STT_LOCALE.ja,
+      deviceId: settings.micId,
+      onInterim: (t) => setLive(t || 'Listening…'),
+    });
+  }
+  if (!asrReady()) throw new Error('Voice input needs the offline pack here. Download it in Settings.');
+  const rec = new Recorder();
+  capture = rec;
+  setLive('Listening on device… (tap again when done)');
+  const audio = await rec.record({ deviceId: settings.micId });
+  if (!audio || capture !== rec) return '';
+  setLive('Recognising speech on device…');
+  return transcribe(audio, lang);
+}
+
 async function startListening(side) {
-  if (!settings.apiKey) {
+  if (settings.engine !== 'offline' && !settings.apiKey && !canTranslateOffline()) {
     openSettings();
     return;
   }
@@ -279,12 +404,7 @@ async function startListening(side) {
   const lang = SIDES[side].from;
   let text = '';
   try {
-    text = await listener.listen({
-      lang,
-      sttLocale: lang === 'en' ? settings.enLocale : STT_LOCALE.ja,
-      deviceId: settings.micId,
-      onInterim: (t) => setLive(t || 'Listening…'),
-    });
+    text = applyGlossary(await captureSpeech(lang), settings.context);
   } catch (err) {
     showBanner(esc(err.message));
   }
@@ -302,10 +422,11 @@ async function startListening(side) {
 
 function stopListening(keep = true) {
   if (keep) {
-    listener.stop(); // startListening continues with what was heard.
+    capture?.stop(); // startListening continues with what was heard.
   } else {
     listeningSide = null;
-    listener.abort();
+    capture?.abort();
+    capture = null;
     setLive(null);
     renderMics();
   }
@@ -322,7 +443,10 @@ function onMic(side) {
 }
 
 async function askInterpreter(question) {
-  if (!settings.apiKey) return openSettings();
+  if (!useClaude()) {
+    showBanner('Asking the interpreter needs Claude (internet and API key). The Phrases tab works offline.');
+    return;
+  }
   const entry = { id: `${Date.now()}-q`, kind: 'qa', source: question, answer: '', pending: true };
   history.push(entry);
   renderCard(entry);
@@ -387,6 +511,10 @@ function openSettings() {
   $('sHeadset').checked = settings.headset;
   $('sHeadset').disabled = !headsetSupported;
   $('sContext').value = settings.context;
+  $('sEngine').value = settings.engine;
+  $('sAsrSize').value = settings.asrSize;
+  $('sGpu').checked = settings.gpu;
+  renderOfflineStatus();
   fillVoices($('sVoiceEn'), 'en', settings.voiceEn);
   fillVoices($('sVoiceJa'), 'ja', settings.voiceJa);
   fillMics(false);
@@ -435,6 +563,9 @@ dialog.addEventListener('close', () => {
     autoTurn: $('sAutoTurn').checked,
     headset: $('sHeadset').checked,
     context: $('sContext').value,
+    engine: $('sEngine').value,
+    asrSize: $('sAsrSize').value,
+    gpu: $('sGpu').checked,
   });
   if (prevMic !== settings.micId) releaseMic();
   $('quickAutoTurn').checked = settings.autoTurn;
@@ -463,6 +594,52 @@ $('micPartner').addEventListener('click', () => {
 });
 
 $('settingsBtn').addEventListener('click', openSettings);
+
+function renderOfflineStatus(extra = '') {
+  const s = offlineStatus();
+  const builtin = 'Translator' in self ? 'Chrome on-device translator available.' : '';
+  $('sOfflineStatus').innerHTML = s.ready
+    ? `✅ Offline pack ready: speech model “${esc(s.asrSize)}”, translation ${s.mt === 'builtin' ? 'by Chrome on-device translator' : 'by NLLB model'}. ${extra}`
+    : `Not downloaded. ${builtin} ${extra}`;
+}
+
+$('sDownload').addEventListener('click', async () => {
+  const btn = $('sDownload');
+  const bar = $('sProgress');
+  btn.disabled = true;
+  bar.hidden = false;
+  const files = {};
+  try {
+    await downloadPack({
+      asrSize: $('sAsrSize').value,
+      gpu: $('sGpu').checked,
+      onProgress: (p) => {
+        if (!p.file) return;
+        files[p.file] = { loaded: p.loaded || 0, total: p.total || p.loaded || 1 };
+        const all = Object.values(files);
+        const loaded = all.reduce((n, f) => n + f.loaded, 0);
+        const total = all.reduce((n, f) => n + f.total, 0);
+        bar.value = total ? loaded / total : 0;
+        const mb = (n) => (n / 1e6).toFixed(0);
+        $('sOfflineStatus').textContent = total > 1e6 ? `Downloading… ${mb(loaded)} / ${mb(total)} MB` : 'Preparing…';
+      },
+    });
+    renderOfflineStatus();
+  } catch (err) {
+    renderOfflineStatus(`⚠️ Download failed: ${esc(err.message)}`);
+  } finally {
+    btn.disabled = false;
+    bar.hidden = true;
+    checkSetup();
+  }
+});
+
+$('sForget').addEventListener('click', async () => {
+  if (!confirm('Delete the downloaded offline models from this phone?')) return;
+  await forgetPack();
+  renderOfflineStatus();
+  checkSetup();
+});
 $('sMicRefresh').addEventListener('click', () => fillMics(true));
 $('sClear').addEventListener('click', () => {
   if (!confirm('Clear the whole conversation?')) return;
@@ -497,7 +674,6 @@ $('typeForm').addEventListener('submit', (e) => {
   e.preventDefault();
   const text = $('typeInput').value.trim();
   if (!text) return;
-  if (!settings.apiKey) return openSettings();
   unlockSpeech();
   $('typeInput').value = '';
   processUtterance(newEntry(settings.typeLang === 'en' ? 'me' : 'partner', text));
@@ -510,6 +686,26 @@ $('askForm').addEventListener('submit', (e) => {
   $('askInput').value = '';
   askInterpreter(q);
 });
+
+$('phrases').addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-phrase]');
+  if (!btn) return;
+  const [g, i] = btn.dataset.phrase.split(':').map(Number);
+  unlockSpeech();
+  speak(PHRASEBOOK[g].phrases[i][0], 'ja', voiceOpts('ja'));
+});
+$('phrases').addEventListener('contextmenu', (e) => {
+  const btn = e.target.closest('[data-phrase]');
+  if (!btn) return;
+  e.preventDefault();
+  const [g, i] = btn.dataset.phrase.split(':').map(Number);
+  const [ja, , en] = PHRASEBOOK[g].phrases[i];
+  showBig({ translation: ja, source: en });
+});
+
+$('engineChip').addEventListener('click', openSettings);
+window.addEventListener('online', checkSetup);
+window.addEventListener('offline', checkSetup);
 
 transcript.addEventListener('click', (e) => {
   const card = e.target.closest('.card');
@@ -539,9 +735,12 @@ $('bigClose').addEventListener('click', () => ($('bigView').hidden = true));
 
 // ---- Start ----
 
+renderPhrases();
 renderMode();
 renderAll();
 checkSetup();
+if ('requestIdleCallback' in window) requestIdleCallback(warmUp);
+else setTimeout(warmUp, 2000);
 if (settings.headset) {
   // Media playback needs a user gesture, so wait for the first tap.
   document.addEventListener('click', applyHeadset, { once: true });
