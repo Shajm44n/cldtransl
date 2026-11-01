@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#11131a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Kakehashi">
+  <meta name="description" content="English ⇄ Japanese AI translator and interpreter for your phone and Bluetooth headset.">
+  <title>Kakehashi</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="logo">架</span><span>Kakehashi</span></div>
+    <nav class="modes" role="tablist" aria-label="Mode">
+      <button role="tab" data-mode="translator" aria-selected="true">Translator</button>
+      <button role="tab" data-mode="interpreter" aria-selected="false">Interpreter</button>
+    </nav>
+    <button class="icon-btn" id="settingsBtn" aria-label="Settings">⚙︎</button>
+  </header>
+
+  <div id="banner" class="banner" hidden></div>
+
+  <main id="transcript" class="transcript" aria-live="polite">
+    <section class="empty" id="emptyState">
+      <h2>Ready to talk</h2>
+      <p class="mode-help" data-for="translator"><b>Translator</b> gives you fast, direct translation. Tap the button for whoever is speaking. Translations are read aloud through your headset.</p>
+      <p class="mode-help" data-for="interpreter" hidden><b>Interpreter</b> also explains hidden meaning and Japanese business etiquette, and knows automotive, AI and your glossary. When your partner speaks, it suggests replies. You can also ask it questions below.</p>
+      <ol>
+        <li>Connect your Bluetooth headset to the phone.</li>
+        <li>Add your Anthropic API key in <b>Settings</b>.</li>
+        <li>Tap <b>🇬🇧 I speak</b> or <b>🇯🇵 相手</b> and talk.</li>
+      </ol>
+    </section>
+  </main>
+
+  <div id="live" class="live" hidden>
+    <span class="dot"></span><span id="liveText">Listening…</span>
+  </div>
+
+  <footer class="controls">
+    <form id="askForm" class="ask" hidden>
+      <input id="askInput" type="text" placeholder="Ask the interpreter… e.g. How do I politely say no?" autocomplete="off" enterkeyhint="send">
+      <button type="submit" class="small-btn">Ask</button>
+    </form>
+    <form id="typeForm" class="typer">
+      <button type="button" id="typeLang" class="small-btn lang-toggle" aria-label="Typing language">EN</button>
+      <input id="typeInput" type="text" placeholder="Or type to translate…" autocomplete="off" enterkeyhint="send">
+      <button type="submit" class="small-btn">Go</button>
+    </form>
+    <div class="mics">
+      <button class="mic" id="micMe" data-side="me">
+        <span class="flag">🇬🇧</span><span class="label">I speak</span><span class="sub">English → 日本語</span>
+      </button>
+      <button class="mic" id="micPartner" data-side="partner">
+        <span class="flag">🇯🇵</span><span class="label">相手 · Partner</span><span class="sub">日本語 → English</span>
+      </button>
+    </div>
+    <div class="toggles">
+      <label><input type="checkbox" id="quickAutoTurn"> Hands-free</label>
+      <button type="button" id="stopBtn" class="link-btn">Stop audio</button>
+    </div>
+  </footer>
+
+  <dialog id="settings">
+    <form method="dialog" class="settings">
+      <h2>Settings</h2>
+
+      <label>Anthropic API key
+        <input id="sApiKey" type="password" autocomplete="off" placeholder="sk-ant-…">
+        <small>Stored only on this phone. Get one at console.anthropic.com.</small>
+      </label>
+
+      <label>Model
+        <select id="sModel">
+          <option value="claude-opus-5-5">Claude Opus 5.5 (best quality)</option>
+          <option value="claude-sonnet-5-5">Claude Sonnet 5.5 (faster)</option>
+          <option value="claude-haiku-5-5">Claude Haiku 5.5 (fastest, cheapest)</option>
+        </select>
+      </label>
+
+      <label>Japanese politeness
+        <select id="sFormality">
+          <option value="business">Business keigo (meetings, customers)</option>
+          <option value="polite">Polite です・ます (default)</option>
+          <option value="casual">Casual (friends)</option>
+        </select>
+      </label>
+
+      <label>Interpreter depth
+        <select id="sEffort">
+          <option value="low">Quick</option>
+          <option value="medium">Balanced</option>
+          <option value="high">Thorough (slower)</option>
+        </select>
+      </label>
+
+      <fieldset>
+        <legend>Audio</legend>
+        <label>Microphone
+          <select id="sMic"><option value="default">System default (headset when connected)</option></select>
+          <small><button type="button" id="sMicRefresh" class="link-btn">Find microphones</button></small>
+        </label>
+        <label>English accent
+          <select id="sEnLocale">
+            <option value="en-US">US</option>
+            <option value="en-GB">UK</option>
+            <option value="en-IN">India</option>
+            <option value="en-AU">Australia</option>
+          </select>
+        </label>
+        <label>English voice <select id="sVoiceEn"></select></label>
+        <label>Japanese voice <select id="sVoiceJa"></select></label>
+        <label>Speech speed <input id="sRate" type="range" min="0.6" max="1.6" step="0.1"></label>
+        <label>Read aloud
+          <select id="sSpeak">
+            <option value="both">Both directions</option>
+            <option value="partner">Only partner → English (to my headset)</option>
+            <option value="off">Off</option>
+          </select>
+        </label>
+        <label class="check"><input type="checkbox" id="sShowBig"> Show my Japanese full-screen for my partner</label>
+        <label class="check"><input type="checkbox" id="sAutoTurn"> Hands-free: listen to the other side after each translation</label>
+        <label class="check"><input type="checkbox" id="sHeadset"> Headset buttons (experimental): play/pause = talk, next = switch speaker</label>
+      </fieldset>
+
+      <label>Context &amp; glossary
+        <textarea id="sContext" rows="7"></textarea>
+        <small>Names, products and terms the interpreter should know and how to write them. This helps fix speech-recognition mistakes too.</small>
+      </label>
+
+      <div class="row">
+        <button type="button" id="sClear" class="danger">Clear conversation</button>
+        <button value="close" class="primary">Done</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="bigView" class="big-view" hidden>
+    <p id="bigText" lang="ja"></p>
+    <p id="bigSub"></p>
+    <button id="bigClose" class="primary">Close</button>
+  </div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

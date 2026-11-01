@@ -1,0 +1,17 @@
+{
+  "name": "cldtransl",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Kakehashi – English ⇄ Japanese AI translator and interpreter for your phone and Bluetooth headset",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "dev": "node build.mjs --serve"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "1.3.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.10"
+  }
+}
